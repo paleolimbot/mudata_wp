@@ -18,7 +18,5 @@ require_once plugin_dir_path(__FILE__) . '/mudata_db.php';
 register_activation_hook( __FILE__, 'mudata_db_install' );
 register_uninstall_hook(__FILE__, 'mudata_db_uninstall');
 
-add_action( 'admin_notices', 'mudata_db_install' );
-
 // define custom post types
 require_once plugin_dir_path(__FILE__) . '/mudata_post_types.php';
