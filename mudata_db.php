@@ -60,7 +60,7 @@ function mudata_db_install() {
     if(!mudata_table_exists($mudata_table_locations)) {
         mudata_create_table($mudata_table_locations, array(
             'location_id' => 'bigint(20) NOT NULL AUTO_INCREMENT',
-            'dataset' => 'varchar(55) NOT NULL',
+            'dataset_id' => 'bigint(20) NOT NULL',
             'location' => 'varchar(55) NOT NULL',
             'bbox_n' => 'DOUBLE',
             'bbox_e' => 'DOUBLE',
@@ -76,7 +76,7 @@ function mudata_db_install() {
     if(!mudata_table_exists($mudata_table_params)) {
         mudata_create_table($mudata_table_params, array(
             'param_id' => 'bigint(20) NOT NULL AUTO_INCREMENT',
-            'dataset' => 'varchar(55) NOT NULL',
+            'dataset_id' => 'bigint(20) NOT NULL',
             'param' => 'varchar(55) NOT NULL',
             'unit_code' => 'varchar(10)',
             'post_id' => 'bigint(20)',
@@ -88,9 +88,10 @@ function mudata_db_install() {
     if(!mudata_table_exists($mudata_table_columns)) {
         mudata_create_table($mudata_table_columns, array(
             'column_id' => 'bigint(20) NOT NULL AUTO_INCREMENT',
-            'dataset' => 'varchar(55) NOT NULL',
+            'dataset_id' => 'bigint(20) NOT NULL',
             'table_' => 'varchar(10) NOT NULL',
             'column_' => 'varchar(10) NOT NULL',
+            'type_' => 'varchar(10)',
             'tags' => 'longtext'
         ), 'column_id');
     }
