@@ -90,8 +90,8 @@ function mudata_db_install() {
             'column_id' => 'bigint(20) NOT NULL AUTO_INCREMENT',
             'dataset_id' => 'bigint(20) NOT NULL',
             'table_' => 'varchar(10) NOT NULL',
-            'column_' => 'varchar(10) NOT NULL',
-            'type_' => 'varchar(10)',
+            'column_' => 'varchar(55) NOT NULL',
+            'type_' => 'varchar(16)',
             'tags' => 'longtext'
         ), 'column_id');
     }
@@ -174,7 +174,8 @@ function mudata_insert($table, $post_type, $slug, $meta = null,
     
     // insert post
     $post_id = wp_insert_post(array('post_title' => $slug, 
-                'post_type' => $post_type));
+                'post_type' => $post_type,
+                'post_status' => 'publish'));
     if($post_id == 0) {
         return array('status' => "Could not insert post for $post_type $slug");
     }
@@ -192,7 +193,8 @@ function mudata_insert($table, $post_type, $slug, $meta = null,
     $table_id = $wpdb->insert_id;
     
     if($insert === false) {
-        return array('status' => "Could not insert row for $post_type $slug");
+        return array('status' => "Could not insert row for $post_type $slug: " .
+            $wpdb->last_error. " / " . json_encode($table_values));
     }
     
     // return an OK status and id
@@ -227,6 +229,7 @@ function mudata_insert_data($dataset_id, $location_id, $param_id, $x_value,
     // check success
     if($insert === false) {
         return array('status' => "Could not insert row in data table: " . 
+            $wpdb->last_error . " / " . 
             json_encode($data_row));
     }
     
@@ -260,7 +263,8 @@ function mudata_insert_column($dataset_id, $table, $column, $type, $tags) {
     
     // check success
     if($insert === false) {
-        return array('status' => "Could not insert row in columns table: " . 
+        return array('status' => "Could not insert row in columns table: " .
+            $wpdb->last_error . " / " . 
             json_encode($column_row));
     }
     

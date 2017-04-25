@@ -18,18 +18,5 @@ require_once plugin_dir_path(__FILE__) . '/mudata_db.php';
 register_activation_hook( __FILE__, 'mudata_db_install' );
 register_uninstall_hook(__FILE__, 'mudata_db_uninstall');
 
-require_once plugin_dir_path(__FILE__) . '/mudata_import.php';
-
-// a test function to put in the admin line
-function test_func() {
-    $output = dummy_import();
-    echo "<pre>\n\n";
-    var_dump($output);
-    echo "\n\n</pre>";
-}
-
-// Now we set that function up to execute when the admin_notices action is called
-add_action( 'admin_notices', 'test_func' );
-
 // define custom post types
 require_once plugin_dir_path(__FILE__) . '/mudata_post_types.php';

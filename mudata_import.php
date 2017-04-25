@@ -180,7 +180,8 @@ function mudata_import_datasets($csv) {
             // update datasets array
             $datasets[$dataset_slug] = $insert_info['id'];
         } else {
-            $warnings[] = "Skipping blank line at line $line_number";
+            $str_line = implode(",", $line);
+            $warnings[] = "Skipping malformed line at line $line_number: `$str_line`";
         }
         $line_number++;
     }
@@ -220,9 +221,9 @@ function mudata_import_params($csv, $datasets) {
     }
 
     // read the file line by line, doing the following things
-    // 1. insert a new post (of type dataset)
-    // 2. insert a row into the databases table
-    // 3. insert an array entry mapping the 'dataset' column to the dataset_id
+    // 1. insert a new post
+    // 2. insert a row into the params table
+    // 3. insert an array entry mapping the 'param' column to the param_id
     $params = array();
     $warnings = array();
     $line_number = 1;
@@ -257,7 +258,8 @@ function mudata_import_params($csv, $datasets) {
             }
             $params[$dataset_slug][$param_slug] = $insert_info['id'];
         } else {
-            $warnings[] = "Skipping malformed line at line $line_number";
+            $str_line = implode(",", $line);
+            $warnings[] = "Skipping malformed line at line $line_number: `$str_line`";
         }
         $line_number++;
     }
@@ -334,7 +336,8 @@ function mudata_import_locations($csv, $datasets) {
             }
             $locations[$dataset_slug][$location_slug] = $insert_info['id'];
         } else {
-            $warnings[] = "Skipping malformed line at line $line_number";
+            $str_line = implode(",", $line);
+            $warnings[] = "Skipping malformed line at line $line_number: `$str_line`";
         }
         $line_number++;
     }
@@ -394,7 +397,7 @@ function mudata_import_data($csv, $datasets, $locations, $params) {
         $value = $line[4];
         $tags = json_decode($line[1]);
         
-        if($dataset_slug && $location_slug && $param_slug && $x_value && $value) {
+        if($dataset_slug && $location_slug && $param_slug && !is_null($x_value) && !is_null($value)) {
             // find ids for dataset, location, and param
             $dataset_id = $datasets[$dataset_slug];
             if(empty($dataset_id)) {
@@ -424,7 +427,83 @@ function mudata_import_data($csv, $datasets, $locations, $params) {
                 return import_error($insert_info['status'], $file);
             }
         } else {
-            $warnings[] = "Skipping malformed line at line $line_number";
+            $str_line = implode(",", $line);
+            $warnings[] = "Skipping malformed line at line $line_number: `$str_line`";
+        }
+        $line_number++;
+    }
+
+    fclose($file);
+    return array('status' => 'OK', 'warnings' => $warnings);
+}
+
+// imports a mudata locations csv
+function mudata_import_columns($csv, $datasets) {
+    
+    // open the csv
+    $file = fopen($csv, 'r');
+    
+    // check if the file could be opened
+    if(!is_resource($file)) {
+        return import_error('The "columns.csv" file does not exist"');
+    }
+        
+    // process the header line
+    $first_line = fgetcsv($file);
+    if($first_line === false) {
+        return import_error('The columns CSV contains no header line', $file);
+    }
+
+    // check for required fields 
+    if($first_line[0] != 'dataset') {
+        return import_error('columns.csv column 1 is not "dataset"', $file);
+    }
+    if($first_line[1] != 'table') {
+        return import_error('columns.csv column 2 is not "table"', $file);
+    }
+    if($first_line[2] != 'column') {
+        return import_error('columns.csv column 3 is not "column"', $file);
+    }
+    if($first_line[3] != 'tags') {
+        return import_error('columns.csv column 4 is not "tags"', $file);
+    }
+
+    // read the file line by line, doing the following things
+    // 1. insert a row into the columns table
+    $warnings = array();
+    $line_number = 1;
+    while (($line = fgetcsv($file)) !== false) {
+        $dataset_slug = $line[0];
+        $table = $line[1];
+        $column = $line[2];
+        $column_tags = json_decode($line[3]);
+        $type = null;
+        
+        if(empty($column_tags)) {
+            $column_tags = array();
+        } elseif(property_exists($column_tags, 'type')) {
+            $type = $column_tags->type;
+            unset($column_tags->type);
+        }
+        
+        if($dataset_slug && $table && $column) {
+            // find dataset_id
+            $dataset_id = $datasets[$dataset_slug];
+            if(empty($dataset_id)) {
+                return import_error("Could not find dataset id for dataset $dataset_slug",
+                        $file);
+            }
+            
+            // insert column entry
+            $insert_info = mudata_insert_column($dataset_id, $table, $column, 
+                    $type, $column_tags);
+            
+            if($insert_info['status'] != 'OK') {
+                return import_error($insert_info['status'], $file);
+            }
+        } else {
+            $str_line = implode(",", $line);
+            $warnings[] = "Skipping malformed line at line $line_number: `$str_line`";
         }
         $line_number++;
     }
@@ -510,13 +589,24 @@ function mudata_import_zip($zipfile) {
             'params' => $params, 'data' => $data);
     }
     
+    // import columns
+    $columns = mudata_import_columns($mudata_files['columns.csv'], $datasets['datasets']);
+    
+    // check for failure
+    if($columns['status'] != 'OK') {
+        mudata_rrmdir($tempdir);
+        return array('status' => 'Columns import failed: ' . $columns['status'],
+            'datasets' => $datasets, 'locations' => $locations,
+            'params' => $params, 'columns' => $columns);
+    }
+    
     // return success
     return array('status' => 'OK', 
         'datasets' => $datasets, 'locations' => $locations,
-        'params' => $params, 'data' => $data);
+        'params' => $params, 'data' => $data, 'columns' => $columns);
 }
 
-function dummy_import() {
-    return mudata_import_zip('/home/anneke/www/paleoarc/wp-content/uploads/2017/04/kg.mudata.zip');
-}
+//function dummy_import() {
+//    return mudata_import_zip('/home/anneke/www/paleoarc/wp-content/uploads/2017/04/kg.mudata.zip');
+//}
 
