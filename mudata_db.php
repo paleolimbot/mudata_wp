@@ -155,3 +155,115 @@ function mudata_install_log($thing) {
     $message = "[" . date("Y/m/d h:i:sa") . "]: " .  $thing . "\n";
     file_put_contents($logfile, $message, FILE_APPEND);
 }
+
+// works for datasets, params, locations
+function mudata_insert($table, $post_type, $slug, $meta = null, 
+        $table_values = null) {
+    global $wpdb;
+    
+    if(empty($meta)) {
+        $meta = array();
+    }
+    
+    if(empty($table_values)) {
+        $table_values = array();
+    }
+    
+    // set 'dataset', 'location', or 'param' field
+    $table_values[$post_type] = $slug;
+    
+    // insert post
+    $post_id = wp_insert_post(array('post_title' => $slug, 
+                'post_type' => $post_type));
+    if($post_id == 0) {
+        return array('status' => "Could not insert post for $post_type $slug");
+    }
+    
+    // set the 'post_id' field
+    $table_values['post_id'] = $post_id;
+    
+    // insert (or update) postmeta 
+    foreach($meta as $key => $value) {
+        update_post_meta($post_id, $key, $value);
+    }
+    
+    // insert table row
+    $insert = $wpdb->insert($table, $table_values);
+    $table_id = $wpdb->insert_id;
+    
+    if($insert === false) {
+        return array('status' => "Could not insert row for $post_type $slug");
+    }
+    
+    // return an OK status and id
+    return array('status' => 'OK', 'id' => $table_id);
+}
+
+// special method for inserting data, since there is no associated post_id
+function mudata_insert_data($dataset_id, $location_id, $param_id, $x_value,
+        $value, $tags) {
+    global $wpdb;
+    global $mudata_table_data;
+    
+    // encode tags
+    if(empty($tags)) {
+        $tag_string = "{}";
+    } else {
+        $tag_string = json_encode($tags);
+    }
+    
+    // insert table row
+    $data_row = array(
+                'dataset_id' => $dataset_id,
+                'location_id' => $location_id,
+                'param_id' => $param_id,
+                'x' => $x_value,
+                'value' => $value,
+                'tags' => $tag_string
+            );
+    $insert = $wpdb->insert($mudata_table_data, $data_row);    
+    $table_id = $wpdb->insert_id;
+    
+    // check success
+    if($insert === false) {
+        return array('status' => "Could not insert row in data table: " . 
+            json_encode($data_row));
+    }
+    
+    // return an OK status and id
+    return array('status' => 'OK', 'id' => $table_id);
+}
+
+// special method for inserting columns, since there is no associated post_id
+function mudata_insert_column($dataset_id, $table, $column, $type, $tags) {
+    global $wpdb;
+    global $mudata_table_columns; 
+    
+    // encode tags
+    if(empty($tags)) {
+        $tag_string = "{}";
+    } else {
+        $tag_string = json_encode($tags);
+    }
+   
+    
+    // insert table row
+    $column_row = array(
+                'dataset_id' => $dataset_id,
+                'table_' => $table,
+                'column_' => $column,
+                'type_' => $type,
+                'tags' => $tag_string
+            );
+    $insert = $wpdb->insert($mudata_table_columns, $column_row);    
+    $table_id = $wpdb->insert_id;
+    
+    // check success
+    if($insert === false) {
+        return array('status' => "Could not insert row in columns table: " . 
+            json_encode($column_row));
+    }
+    
+    // return an OK status and id
+    return array('status' => 'OK', 'id' => $table_id);
+}
