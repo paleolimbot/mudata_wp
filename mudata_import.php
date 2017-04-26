@@ -43,14 +43,19 @@ function mudata_rrmdir($dir) {
    } 
  }
 
- 
-
 // converts a YYYY-MM-DD date into a number
-$mudata_epoch = date_create_from_format('Y-m-d', '1970-01-01');
-function mudata_convert_date($date_string, $format = 'Y-m-d') {
-    global $mudata_epoch;
+function mudata_convert_date($date_string, $format = 'Y-m-d', $epoch = null) {
+    if(is_null($epoch)) {
+        $epoch = date_create_from_format('Y-m-d', '1970-01-01');
+    }
+    if(is_null($epoch)) {
+        echo "NULL EPOCH!";
+    }
     $date = date_create_from_format($format, $date_string);
-    $diff = date_diff($mudata_epoch, $date, false);
+    if(is_null($date)) {
+        return null;
+    }
+    $diff = date_diff($epoch, $date, false);
     
     // return difference in days
     $days = $diff->days;
@@ -420,8 +425,12 @@ function mudata_import_data($csv, $datasets, $locations, $params) {
             }
             
             // insert dataset (and tags as post meta)
+            $numeric_date = mudata_convert_date($x_value);
+            if(is_null($numeric_date)) {
+                return import_error('Could not convert `' . $x_value . '` to a date', $file);
+            }
             $insert_info = mudata_insert_data($dataset_id, $location_id, 
-                    $param_id, mudata_convert_date($x_value), $value, $tags);
+                    $param_id, $numeric_date, $value, $tags);
             
             if($insert_info['status'] != 'OK') {
                 return import_error($insert_info['status'], $file);
@@ -512,8 +521,75 @@ function mudata_import_columns($csv, $datasets) {
     return array('status' => 'OK', 'warnings' => $warnings);
 }
 
+function mudata_preview_table($csv, $n = 26) {
+    // open the csv
+    $file = fopen($csv, 'r');
+    
+    // check if the file could be opened
+    if(!is_resource($file)) {
+        return import_error('The "columns.csv" file does not exist"');
+    }
+    
+    $line_number = 1;
+    $lines = array();
+    while (($line = fgetcsv($file)) !== false) {
+        
+        $lines[] = $line;
+        
+        if($line_number >= $n) {
+            break;
+        }
+        $line_number++;
+    }
+    
+    return array('status' => 'OK', 'lines' => $lines);
+}
+
+function mudata_preview_zip($zipfile) {
+    
+    // create temp dir
+    $tempdir = mudata_tempdir();
+    if(is_null($tempdir)) {
+        return array('status' => 'Could not create temporary directory');
+    }
+    
+    // extract zip archive
+    $mudata_files = mudata_unzip($zipfile, $tempdir);
+    if(is_null($mudata_files)) {
+        mudata_rrmdir($tempdir);
+        return array('status' => 'Could not extract zip archive');
+    }
+    
+    // check for required tables
+    $missing_files = array();
+    $names = array('data.csv', 'locations.csv', 'params.csv', 'datasets.csv', 
+        'columns.csv');
+    foreach($names as $name) {
+        if(!array_key_exists($name, $mudata_files)) {
+            $missing_files[] = $name;
+        }
+    }
+    
+    if(!empty($missing_files)) {
+        mudata_rrmdir($tempdir);
+        return array('status' => 'The zip archive did not contain the following'
+            . ' required files: ' . impolode(', ', $missing_files));
+    }
+    
+    // create array of first 25 records of each table
+    $all_lines = array();
+    foreach($mudata_files as $key => $value) {
+        $all_lines[$key] = mudata_preview_table($value);
+    }
+    
+    $all_lines['status'] = 'OK';
+    
+    // clean temp dir
+    mudata_rrmdir($tempdir);
+    return $all_lines;
+}
+
 function mudata_import_zip($zipfile) {
-    global $wpdb;
     
     // create temp dir
     $tempdir = mudata_tempdir();
@@ -601,12 +677,78 @@ function mudata_import_zip($zipfile) {
     }
     
     // return success
+    mudata_rrmdir($tempdir);
     return array('status' => 'OK', 
         'datasets' => $datasets, 'locations' => $locations,
         'params' => $params, 'data' => $data, 'columns' => $columns);
 }
 
-//function dummy_import() {
-//    return mudata_import_zip('/home/anneke/www/paleoarc/wp-content/uploads/2017/04/kg.mudata.zip');
-//}
+// function to rollback a full or partial import based on the result returned by
+// mudata_import_zip
+function mudata_rollback_import($result) {
+    // TODO currently does nothing silently
+}
 
+// function to process a file upload
+function mudata_upload_file($file_array, $max_size = 5000000) {
+    
+    // check file size
+    if ($file_array["size"] > $max_size) {
+        // file is too big
+        return array('status' => 'File is too large');
+    }
+    
+    // Get the path to the upload directory.
+    $wp_upload_dir = wp_upload_dir();
+
+    // copy uploaded file to uploads dir
+    $base_name = basename($file_array["name"]);
+    $target_file = path_join($wp_upload_dir['path'], $base_name);
+
+    // make sure destination file doesn't exist
+    $final_file_name = $target_file;
+    $ext = pathinfo($target_file, PATHINFO_EXTENSION);
+    $suffix = 0;
+    while(file_exists($final_file_name)) {
+        $suffix++;
+        if(empty($ext)) {
+            $final_file_name = $target_file . $suffix;
+        } else {
+            // replace extension with "" and add to end
+            $base_file = preg_replace("/\." . $ext . "$/", "", $target_file);
+            $final_file_name = $base_file . '_' . $suffix . '.' . $ext;
+        }
+    }
+
+    // move temporary file to uploads directory
+    $moved = move_uploaded_file($file_array["tmp_name"], 
+            $final_file_name);
+
+    // this will throw false when something fishy is going on
+    if($moved === false) {
+        return array('status' => 'Error uploading file');
+    }
+
+    // add attachment (this makes it easier for the user to remove)
+    $filetype = wp_check_filetype( basename( $final_file_name ), null );
+
+    $attachment = array(
+            'guid'           => $wp_upload_dir['url'] . '/' . basename( $final_file_name ), 
+            'post_mime_type' => $filetype['type'],
+            'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $final_file_name ) ),
+            'post_content'   => '',
+            'post_status'    => 'draft'
+    );
+
+    // insert the attachment
+    $attach_id = wp_insert_attachment($attachment, $final_file_name);
+
+    if(!$attach_id) {
+        unlink($final_file_name);
+        return array('status' => 'Could not add attachment to database');
+    }
+    
+    // return attachment ID and filename
+    return array('status' => 'OK', 'filename' => $final_file_name, 
+        'attachment_id' => $attach_id);
+}

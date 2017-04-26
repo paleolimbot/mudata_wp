@@ -20,3 +20,15 @@ register_uninstall_hook(__FILE__, 'mudata_db_uninstall');
 
 // define custom post types
 require_once plugin_dir_path(__FILE__) . '/mudata_post_types.php';
+
+// register import page
+add_action('admin_menu', 'mudata_create_import_menu');
+function mudata_create_import_menu() {
+    //create new top-level menu
+    add_submenu_page('tools.php', 'mudta import', 'mudata import', 
+            'administrator', 'mudata-import', 'mudata_import_page' );
+}
+function mudata_import_page() {
+    include plugin_dir_path(__FILE__) . '/mudata_import_page.php';
+}
+

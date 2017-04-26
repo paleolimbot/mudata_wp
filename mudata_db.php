@@ -52,7 +52,6 @@ function mudata_db_install() {
             'dataset_id' => 'bigint(20) NOT NULL AUTO_INCREMENT',
             'dataset' => 'varchar(55) NOT NULL',
             'post_id' => 'bigint(20)',
-            'tags' => 'longtext'
         ), 'dataset_id');
     }
     
@@ -68,7 +67,6 @@ function mudata_db_install() {
             'bbox_w' => 'DOUBLE',
             'geometry' => 'longtext',
             'post_id' => 'bigint(20)',
-            'tags' => 'longtext'
         ), 'location_id');
     }
     
@@ -80,7 +78,6 @@ function mudata_db_install() {
             'param' => 'varchar(55) NOT NULL',
             'unit_code' => 'varchar(10)',
             'post_id' => 'bigint(20)',
-            'tags' => 'longtext'
         ), 'param_id');
     }
     
